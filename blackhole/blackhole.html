@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Black Hole Simulation</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Orbitron:wght@400;700;900&display=swap');
+
+    :root {
+      --singularity: #000000;
+      --event-horizon: #0a0a0f;
+      --accretion-inner: #ff6a00;
+      --accretion-mid: #ff2d78;
+      --accretion-outer: #7b2fff;
+      --photon: #ffe066;
+      --ui-text: rgba(200, 210, 255, 0.75);
+      --ui-accent: #7b2fff;
+      --glow-orange: rgba(255, 106, 0, 0.55);
+      --glow-purple: rgba(123, 47, 255, 0.45);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: #02010a;
+      overflow: hidden;
+      font-family: 'Space Mono', monospace;
+      color: var(--ui-text);
+    }
+
+    canvas {
+      display: block;
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ── UI overlay ── */
+    #ui {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 28px 34px;
+    }
+
+    #title-block { pointer-events: none; }
+    #title-block h1 {
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 900;
+      font-size: clamp(1.1rem, 2.5vw, 1.9rem);
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: #fff;
+      text-shadow: 0 0 18px var(--glow-orange), 0 0 40px var(--glow-purple);
+      line-height: 1;
+    }
+    #title-block p {
+      margin-top: 6px;
+      font-size: 0.65rem;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: rgba(200,180,255,0.45);
+    }
+
+    #stats {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      font-size: 0.6rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: rgba(180,170,255,0.5);
+    }
+    #stats span { display: block; }
+    #stats b { color: rgba(255,220,100,0.8); font-weight: 400; }
+
+    #controls {
+      position: absolute;
+      bottom: 28px;
+      right: 34px;
+      text-align: right;
+      font-size: 0.58rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(180,170,255,0.38);
+      line-height: 2;
+      pointer-events: none;
+    }
+
+    /* mass slider */
+    #mass-wrap {
+      position: absolute;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      pointer-events: all;
+    }
+    #mass-wrap label {
+      font-size: 0.58rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: rgba(200,190,255,0.45);
+    }
+    #massSlider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 160px;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accretion-inner), var(--accretion-mid), var(--accretion-outer));
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+    }
+    #massSlider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 0 8px var(--accretion-mid);
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+
+<div id="ui">
+  <div id="title-block">
+    <h1>Black Hole</h1>
+    <p>Gravitational Lensing Simulation</p>
+  </div>
+  <div id="stats">
+    <span>Particles &nbsp;<b id="sParticles">0</b></span>
+    <span>Mass &nbsp;<b id="sMass">1.00</b> M☉</span>
+    <span>Schwarzschild r &nbsp;<b id="sRadius">—</b> AU</span>
+  </div>
+</div>
+
+<div id="controls">
+  Click / touch to spawn particles<br>
+  Drag to move black hole<br>
+  Scroll to zoom
+</div>
+
+<div id="mass-wrap">
+  <label>Mass</label>
+  <input type="range" id="massSlider" min="0.3" max="4" step="0.01" value="1">
+</div>
+
+<script>
+/* ───────────────────────────────────────────
+   BLACK HOLE SIMULATION
+   Newtonian gravity + relativistic-ish lensing effect on canvas
+─────────────────────────────────────────── */
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+
+let W, H, cx, cy;
+function resize() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  cx = W / 2;  cy = H / 2;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ── Black hole state ──
+const bh = {
+  x: cx, y: cy,
+  mass: 1.0,       // solar masses (visual scale)
+  get rs() { return 28 * this.mass; },          // Schwarzschild radius (px)
+  get accOuter() { return this.rs * 6.5; },     // accretion disk outer
+  get photonR()  { return this.rs * 1.5; }      // photon sphere
+};
+
+// ── Particle pool ──
+const MAX  = 1200;
+const particles = [];
+
+function spawnParticle(x, y, vx, vy, type='stream') {
+  if (particles.length >= MAX) particles.splice(0, 50);
+  const hue = Math.random() < 0.6
+    ? 20  + Math.random()*40   // orange-yellow
+    : 270 + Math.random()*60;  // purple-pink
+  particles.push({
+    x, y, vx, vy,
+    hue,
+    life: 1,
+    dead: false,
+    size: 1.2 + Math.random()*1.5,
+    type
+  });
+}
+
+// spawn background star-dust at start
+function spawnBackground() {
+  for (let i = 0; i < 600; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist  = bh.accOuter * (1.3 + Math.random() * 5);
+    const x = bh.x + Math.cos(angle) * dist;
+    const y = bh.y + Math.sin(angle) * dist;
+    // orbital tangential velocity (counter-clockwise)
+    const v = Math.sqrt(bh.mass * 1200 / dist) * (0.5 + Math.random() * 0.5);
+    spawnParticle(x, y, -Math.sin(angle)*v, Math.cos(angle)*v, 'orbit');
+  }
+}
+
+// ── Gravitational attraction ──
+function gravity(p) {
+  const dx = bh.x - p.x;
+  const dy = bh.y - p.y;
+  const distSq = dx*dx + dy*dy;
+  const dist   = Math.sqrt(distSq);
+  if (dist < 1) return;
+  // F = GM/r²  (G & M folded into bhMass scale)
+  const G  = 4000 * bh.mass;
+  const f  = G / distSq;
+  p.vx += (dx / dist) * f;
+  p.vy += (dy / dist) * f;
+
+  // speed clamp (relativistic cap)
+  const spd = Math.sqrt(p.vx*p.vx + p.vy*p.vy);
+  const cap = 28 + 5*bh.mass;
+  if (spd > cap) { p.vx *= cap/spd; p.vy *= cap/spd; }
+}
+
+// ── Star field (static) ──
+const stars = Array.from({length: 280}, () => ({
+  x: Math.random(),
+  y: Math.random(),
+  r: Math.random() * 1.2,
+  a: 0.3 + Math.random() * 0.7
+}));
+
+// ── Lensing distortion helper ──
+// We'll do a radial pixel-shift on a snapshot – simple but effective
+let lensBuffer = null;
+let lensCtx    = null;
+function ensureLens() {
+  if (!lensBuffer || lensBuffer.width !== W) {
+    lensBuffer = document.createElement('canvas');
+    lensBuffer.width  = W;
+    lensBuffer.height = H;
+    lensCtx = lensBuffer.getContext('2d');
+  }
+}
+
+// ── Drawing helpers ──
+function drawStars() {
+  ctx.save();
+  for (const s of stars) {
+    const sx = s.x * W, sy = s.y * H;
+    // skip if inside event horizon
+    const dx = sx - bh.x, dy = sy - bh.y;
+    if (dx*dx + dy*dy < bh.rs*bh.rs*1.5) continue;
+    ctx.globalAlpha = s.a;
+    ctx.fillStyle   = '#fff';
+    ctx.beginPath();
+    ctx.arc(sx, sy, s.r, 0, Math.PI*2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawAccretionDisk() {
+  const { x, y, rs, accOuter } = bh;
+  // outer glow rings
+  for (let i = 5; i > 0; i--) {
+    const r  = accOuter * (0.6 + i * 0.14);
+    const al = 0.02 + i * 0.015;
+    const g  = ctx.createRadialGradient(x, y, rs, x, y, r);
+    g.addColorStop(0,   `hsla(290,100%,60%,0)`);
+    g.addColorStop(0.5, `hsla(330,100%,55%,${al})`);
+    g.addColorStop(1,   `hsla(25,100%,55%,0)`);
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI*2);
+    ctx.fillStyle = g;
+    ctx.fill();
+  }
+
+  // inner hot ring
+  const grad = ctx.createRadialGradient(x, y, rs*0.9, x, y, accOuter);
+  grad.addColorStop(0,    'hsla(50,100%,90%,0.9)');
+  grad.addColorStop(0.08, 'hsla(35,100%,70%,0.7)');
+  grad.addColorStop(0.25, 'hsla(15,100%,55%,0.4)');
+  grad.addColorStop(0.55, 'hsla(300,100%,45%,0.18)');
+  grad.addColorStop(1,    'hsla(260,100%,35%,0)');
+  ctx.beginPath();
+  ctx.arc(x, y, accOuter, 0, Math.PI*2);
+  ctx.fillStyle = grad;
+  ctx.fill();
+}
+
+function drawEventHorizon() {
+  const { x, y, rs } = bh;
+  // black disc
+  ctx.beginPath();
+  ctx.arc(x, y, rs, 0, Math.PI*2);
+  ctx.fillStyle = '#000';
+  ctx.fill();
+
+  // photon ring
+  ctx.beginPath();
+  ctx.arc(x, y, rs * 1.08, 0, Math.PI*2);
+  ctx.strokeStyle = 'rgba(255,220,80,0.65)';
+  ctx.lineWidth   = 1.5;
+  ctx.stroke();
+
+  // outer shadow
+  const shadow = ctx.createRadialGradient(x, y, rs*0.95, x, y, rs*2.2);
+  shadow.addColorStop(0,   'rgba(0,0,0,1)');
+  shadow.addColorStop(0.4, 'rgba(0,0,0,0.7)');
+  shadow.addColorStop(1,   'rgba(0,0,0,0)');
+  ctx.beginPath();
+  ctx.arc(x, y, rs*2.2, 0, Math.PI*2);
+  ctx.fillStyle = shadow;
+  ctx.fill();
+}
+
+function drawParticles() {
+  for (const p of particles) {
+    if (p.dead) continue;
+    const al = p.life * 0.85;
+    ctx.globalAlpha = al;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+    ctx.fillStyle = `hsl(${p.hue},100%,70%)`;
+    ctx.shadowColor = `hsl(${p.hue},100%,75%)`;
+    ctx.shadowBlur  = 6;
+    ctx.fill();
+  }
+  ctx.globalAlpha  = 1;
+  ctx.shadowBlur   = 0;
+}
+
+// ── Main loop ──
+let lastTime = 0;
+function loop(ts) {
+  const dt = Math.min((ts - lastTime) / 16.67, 3); // normalized to 60fps
+  lastTime = ts;
+
+  // clear
+  ctx.clearRect(0, 0, W, H);
+
+  // deep space bg
+  ctx.fillStyle = '#02010a';
+  ctx.fillRect(0, 0, W, H);
+
+  drawStars();
+  drawAccretionDisk();
+
+  // update + draw particles
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    if (p.dead) { particles.splice(i, 1); continue; }
+
+    gravity(p);
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+
+    const dx   = p.x - bh.x, dy = p.y - bh.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+
+    // absorbed
+    if (dist < bh.rs * 0.92) { p.dead = true; continue; }
+
+    // fade out if far
+    if (dist > Math.max(W, H) * 1.4) { p.dead = true; continue; }
+
+    // fade near horizon
+    if (dist < bh.rs * 2.5) p.life -= 0.06 * dt;
+    else p.life = Math.min(1, p.life + 0.002 * dt);
+    if (p.life <= 0) { p.dead = true; }
+  }
+  drawParticles();
+  drawEventHorizon();
+
+  // top ambient glow
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  const ambGrad = ctx.createRadialGradient(bh.x, bh.y, bh.rs*1.1, bh.x, bh.y, bh.rs*4);
+  ambGrad.addColorStop(0,   'rgba(255,150,30,0.07)');
+  ambGrad.addColorStop(0.4, 'rgba(200,50,150,0.04)');
+  ambGrad.addColorStop(1,   'rgba(80,20,200,0)');
+  ctx.fillStyle = ambGrad;
+  ctx.beginPath();
+  ctx.arc(bh.x, bh.y, bh.rs*4, 0, Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+
+  // replenish orbital particles
+  if (Math.random() < 0.4) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist  = bh.accOuter * (1.5 + Math.random() * 4);
+    const x = bh.x + Math.cos(angle) * dist;
+    const y = bh.y + Math.sin(angle) * dist;
+    const v = Math.sqrt(bh.mass * 1200 / dist) * (0.6 + Math.random()*0.6);
+    spawnParticle(x, y, -Math.sin(angle)*v, Math.cos(angle)*v, 'orbit');
+  }
+
+  // HUD
+  document.getElementById('sParticles').textContent = particles.filter(p=>!p.dead).length;
+  document.getElementById('sMass').textContent      = bh.mass.toFixed(2);
+  document.getElementById('sRadius').textContent    = (bh.rs * 0.0047).toFixed(3);
+
+  requestAnimationFrame(loop);
+}
+
+// ── Init ──
+spawnBackground();
+requestAnimationFrame(loop);
+
+// ── Interactions ──
+// Click → burst of particles
+function spawnBurst(mx, my) {
+  for (let i = 0; i < 30; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const spd   = 1 + Math.random() * 3;
+    spawnParticle(mx + (Math.random()-0.5)*20,
+                  my + (Math.random()-0.5)*20,
+                  Math.cos(angle)*spd,
+                  Math.sin(angle)*spd,
+                  'burst');
+  }
+}
+
+// Drag BH
+let dragging = false;
+canvas.addEventListener('mousedown', e => {
+  const dx = e.clientX - bh.x, dy = e.clientY - bh.y;
+  if (dx*dx + dy*dy < (bh.rs*2.5)**2) { dragging = true; }
+  else spawnBurst(e.clientX, e.clientY);
+});
+canvas.addEventListener('mousemove', e => {
+  if (dragging) { bh.x = e.clientX; bh.y = e.clientY; }
+});
+canvas.addEventListener('mouseup', () => { dragging = false; });
+
+// Touch support
+let touchId = null;
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const t = e.changedTouches[0];
+  const dx = t.clientX - bh.x, dy = t.clientY - bh.y;
+  if (dx*dx + dy*dy < (bh.rs*2.5)**2) { dragging = true; touchId = t.identifier; }
+  else spawnBurst(t.clientX, t.clientY);
+}, { passive: false });
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    if (t.identifier === touchId && dragging) { bh.x = t.clientX; bh.y = t.clientY; }
+  }
+}, { passive: false });
+canvas.addEventListener('touchend', () => { dragging = false; touchId = null; });
+
+// Scroll → mass
+window.addEventListener('wheel', e => {
+  bh.mass = Math.max(0.3, Math.min(4, bh.mass - e.deltaY * 0.001));
+  document.getElementById('massSlider').value = bh.mass;
+}, { passive: true });
+
+// Slider → mass
+document.getElementById('massSlider').addEventListener('input', e => {
+  bh.mass = parseFloat(e.target.value);
+});
+</script>
+</body>
+</html>
