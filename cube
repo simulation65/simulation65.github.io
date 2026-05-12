@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quantum Shape</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: radial-gradient(circle at center, #0b1020 0%, #03060d 70%, #000 100%);
+    }
+
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <script>
+    const canvas = document.getElementById("c");
+    const ctx = canvas.getContext("2d");
+
+    let w = canvas.width = window.innerWidth;
+    let h = canvas.height = window.innerHeight;
+
+    window.addEventListener("resize", () => {
+      w = canvas.width = window.innerWidth;
+      h = canvas.height = window.innerHeight;
+    });
+
+    // 3D-ish "quantum" polyhedron vertices
+    const vertices = [
+      [-1, -1, -1], [ 1, -1, -1], [ 1,  1, -1], [-1,  1, -1],
+      [-1, -1,  1], [ 1, -1,  1], [ 1,  1,  1], [-1,  1,  1]
+    ];
+
+    const edges = [
+      [0,1],[1,2],[2,3],[3,0],
+      [4,5],[5,6],[6,7],[7,4],
+      [0,4],[1,5],[2,6],[3,7]
+    ];
+
+    const shape = {
+      x: w * 0.5,
+      y: h * 0.5,
+      z: 0,
+      size: 85,
+      vx: 0.55,
+      vy: 0.42,
+      rx: 0,
+      ry: 0,
+      rz: 0
+    };
+
+    const particles = [];
+    const cornerRadius = 70;
+
+    function teleport() {
+      shape.x = 100 + Math.random() * (w - 200);
+      shape.y = 100 + Math.random() * (h - 200);
+      shape.vx = (Math.random() * 1.2 - 0.6) || 0.4;
+      shape.vy = (Math.random() * 1.2 - 0.6) || -0.4;
+
+      for (let i = 0; i < 30; i++) {
+        particles.push({
+          x: shape.x,
+          y: shape.y,
+          vx: (Math.random() - 0.5) * 5,
+          vy: (Math.random() - 0.5) * 5,
+          life: 1
+        });
+      }
+    }
+
+    function nearCorner(x, y) {
+      const corners = [
+        [0, 0],
+        [w, 0],
+        [0, h],
+        [w, h]
+      ];
+
+      return corners.some(([cx, cy]) => {
+        const dx = x - cx;
+        const dy = y - cy;
+        return Math.sqrt(dx * dx + dy * dy) < cornerRadius;
+      });
+    }
+
+    function rotate3D([x, y, z], ax, ay, az) {
+      // Rotate X
+      let dy = y * Math.cos(ax) - z * Math.sin(ax);
+      let dz = y * Math.sin(ax) + z * Math.cos(ax);
+      y = dy; z = dz;
+
+      // Rotate Y
+      let dx = x * Math.cos(ay) + z * Math.sin(ay);
+      dz = -x * Math.sin(ay) + z * Math.cos(ay);
+      x = dx; z = dz;
+
+      // Rotate Z
+      dx = x * Math.cos(az) - y * Math.sin(az);
+      dy = x * Math.sin(az) + y * Math.cos(az);
+      x = dx; y = dy;
+
+      return [x, y, z];
+    }
+
+    function project([x, y, z]) {
+      const depth = 400;
+      const scale = depth / (depth + z);
+      return [x * scale, y * scale, scale];
+    }
+
+    function drawQuantumShape(time) {
+      const pulse = 1 + Math.sin(time * 0.002) * 0.12;
+      const projected = [];
+
+      for (const v of vertices) {
+        const r = rotate3D(v, shape.rx, shape.ry, shape.rz);
+        const p = project([
+          r[0] * shape.size * pulse,
+          r[1] * shape.size * pulse,
+          r[2] * shape.size * pulse
+        ]);
+        projected.push([
+          shape.x + p[0],
+          shape.y + p[1],
+          p[2]
+        ]);
+      }
+
+      // Glow lines
+      ctx.save();
+      ctx.lineWidth = 2;
+      ctx.shadowBlur = 20;
+      ctx.shadowColor = `hsla(${(time * 0.05) % 360}, 100%, 70%, 0.9)`;
+      ctx.strokeStyle = `hsla(${(time * 0.05) % 360}, 100%, 70%, 0.9)`;
+
+      for (const [a, b] of edges) {
+        ctx.beginPath();
+        ctx.moveTo(projected[a][0], projected[a][1]);
+        ctx.lineTo(projected[b][0], projected[b][1]);
+        ctx.stroke();
+      }
+
+      ctx.restore();
+
+      // Core glow
+      const grad = ctx.createRadialGradient(shape.x, shape.y, 0, shape.x, shape.y, 40);
+      grad.addColorStop(0, "rgba(255,255,255,0.9)");
+      grad.addColorStop(0.3, `hsla(${(time * 0.08) % 360}, 100%, 70%, 0.35)`);
+      grad.addColorStop(1, "rgba(0,0,0,0)");
+
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(shape.x, shape.y, 45, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Orbiting quantum sparks
+      for (let i = 0; i < 6; i++) {
+        const angle = time * 0.001 + i * (Math.PI * 2 / 6);
+        const radius = 26 + Math.sin(time * 0.003 + i) * 10;
+        const px = shape.x + Math.cos(angle) * radius;
+        const py = shape.y + Math.sin(angle * 1.3) * radius;
+
+        ctx.beginPath();
+        ctx.fillStyle = `hsla(${(time * 0.1 + i * 40) % 360}, 100%, 75%, 0.9)`;
+        ctx.shadowBlur = 12;
+        ctx.shadowColor = ctx.fillStyle;
+        ctx.arc(px, py, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function drawParticles() {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life -= 0.02;
+
+        ctx.beginPath();
+        ctx.fillStyle = `rgba(120, 220, 255, ${Math.max(p.life, 0)})`;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = "rgba(120,220,255,0.8)";
+        ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+        ctx.fill();
+
+        if (p.life <= 0) particles.splice(i, 1);
+      }
+    }
+
+    function animate(time) {
+      ctx.clearRect(0, 0, w, h);
+
+      // Slight motion blur/trail
+      ctx.fillStyle = "rgba(3, 6, 13, 0.18)";
+      ctx.fillRect(0, 0, w, h);
+
+      shape.x += shape.vx;
+      shape.y += shape.vy;
+
+      // Slow movement across the screen
+      if (shape.x < 40 || shape.x > w - 40) shape.vx *= -1;
+      if (shape.y < 40 || shape.y > h - 40) shape.vy *= -1;
+
+      // Teleport if touching a corner
+      if (nearCorner(shape.x, shape.y)) {
+        teleport();
+      }
+
+      // Continuous 3D rotation
+      shape.rx += 0.01;
+      shape.ry += 0.008;
+      shape.rz += 0.006;
+
+      drawParticles();
+      drawQuantumShape(time);
+
+      requestAnimationFrame(animate);
+    }
+
+    teleport(); // start at random spot
+    requestAnimationFrame(animate);
+  </script>
+</body>
+</html>
