@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>|</title>
+
+<style>
+    *{
+        margin:0;
+        padding:0;
+        box-sizing:border-box;
+    }
+
+    body{
+        overflow:hidden;
+        background:#000;
+        image-rendering: pixelated;
+        font-family: monospace;
+    }
+
+    canvas{
+        width:100vw;
+        height:100vh;
+        display:block;
+    }
+</style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+
+<script>
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+
+let w, h;
+
+function resize(){
+    w = canvas.width = window.innerWidth;
+    h = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener("resize", resize);
+
+let flicker = 1;
+let flickerTarget = 1;
+
+setInterval(() => {
+    flickerTarget = 0.3 + Math.random() * 0.9;
+}, 120);
+
+function pixelRect(x,y,w,h,color){
+    ctx.fillStyle = color;
+    ctx.fillRect(Math.floor(x),Math.floor(y),Math.floor(w),Math.floor(h));
+}
+
+let gearRot = 0;
+
+function drawGear(cx, cy, r, teeth, rot){
+    for(let i=0;i<teeth;i++){
+        const a = (Math.PI*2 / teeth) * i + rot;
+        const tx = cx + Math.cos(a) * r;
+        const ty = cy + Math.sin(a) * r;
+
+        pixelRect(tx-3, ty-3, 6, 6, "#888");
+    }
+
+    ctx.beginPath();
+    ctx.fillStyle = "#555";
+    ctx.arc(cx, cy, r-6, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.fillStyle = "#222";
+    ctx.arc(cx, cy, 8, 0, Math.PI*2);
+    ctx.fill();
+}
+
+function drawMachine(){
+
+    const mx = w/2;
+    const my = h/2 + 60;
+
+
+    pixelRect(mx-170,my-60,340,120,"#1d1d1d");
+
+
+    pixelRect(mx-90,my-160,180,100,"#262626");
+
+    pixelRect(mx-130,my-140,20,180,"#444");
+    pixelRect(mx+110,my-140,20,180,"#444");
+
+    pixelRect(mx-190,my-20,40,14,"#666");
+    pixelRect(mx+150,my-20,40,14,"#666");
+
+    pixelRect(mx-50,my-125,100,40,"#0a170a");
+
+    ctx.fillStyle = `rgba(0,255,120,${0.15 * flicker})`;
+    ctx.fillRect(mx-50,my-125,100,40);
+
+    for(let i=0;i<7;i++){
+        pixelRect(mx-120 + i*18,my+20,10,30,"#111");
+        pixelRect(mx+10 + i*18,my+20,10,30,"#111");
+    }
+
+    drawGear(mx-80,my-5,38,12,gearRot);
+    drawGear(mx+80,my-5,28,10,-gearRot*1.2);
+
+
+    ctx.strokeStyle="#333";
+    ctx.lineWidth=4;
+
+    ctx.beginPath();
+    ctx.moveTo(mx-40,my-60);
+    ctx.bezierCurveTo(mx-80,my-100,mx+80,my-110,mx+40,my-60);
+    ctx.stroke();
+
+    const pulse = 0.5 + Math.sin(Date.now()*0.01)*0.5;
+
+    ctx.fillStyle = `rgba(255,0,0,${pulse})`;
+    ctx.fillRect(mx-10,my-30,20,20);
+}
+
+function drawBackground(){
+
+    ctx.fillStyle = "#050505";
+    ctx.fillRect(0,0,w,h);
+
+    ctx.fillStyle = "#0b0b0b";
+    ctx.fillRect(0,h*0.1,w,h*0.8);
+
+    ctx.fillStyle = "#111";
+    ctx.fillRect(0,h*0.75,w,h*0.25);
+
+    const lx = w/2;
+    const ly = h*0.22;
+
+    const glow = ctx.createRadialGradient(
+        lx,ly,10,
+        lx,ly,280
+    );
+
+    glow.addColorStop(0,`rgba(255,255,220,${0.32 * flicker})`);
+    glow.addColorStop(1,"rgba(0,0,0,0)");
+
+    ctx.fillStyle = glow;
+    ctx.fillRect(0,0,w,h);
+
+    ctx.fillStyle = `rgba(255,255,220,${flicker})`;
+    ctx.fillRect(lx-14,ly-14,28,28);
+
+    for(let i=0;i<1200;i++){
+        const px = Math.random()*w;
+        const py = Math.random()*h;
+
+        const alpha = Math.random()*0.03;
+
+        ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+        ctx.fillRect(px,py,2,2);
+    }
+}
+
+function animate(){
+
+    flicker += (flickerTarget - flicker) * 0.15;
+
+    gearRot += 0.01;
+
+    drawBackground();
+    drawMachine();
+
+    const vignette = ctx.createRadialGradient(
+        w/2,h/2,100,
+        w/2,h/2,w*0.7
+    );
+
+    vignette.addColorStop(0,"rgba(0,0,0,0)");
+    vignette.addColorStop(1,"rgba(0,0,0,0.85)");
+
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0,0,w,h);
+
+    requestAnimationFrame(animate);
+}
+
+animate();
+</script>
+
+</body>
+</html>
