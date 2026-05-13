@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>⨇</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #05070a;
+    }
+
+    canvas {
+      width: 100vw;
+      height: 100vh;
+      display: block;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <script>
+    const canvas = document.getElementById("c");
+    const ctx = canvas.getContext("2d");
+
+    const W = 160;
+    const H = 90;
+    canvas.width = W;
+    canvas.height = H;
+    ctx.imageSmoothingEnabled = false;
+
+    const lerp = (a, b, t) => a + (b - a) * t;
+
+    function fillPoly(points, style) {
+      ctx.fillStyle = style;
+      ctx.beginPath();
+      ctx.moveTo(points[0][0], points[0][1]);
+      for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function line(x1, y1, x2, y2, style, width = 1) {
+      ctx.strokeStyle = style;
+      ctx.lineWidth = width;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
+
+    function drawScene(time) {
+      const t = time * 0.001;
+      const vpX = W / 2 + Math.sin(t * 0.6) * 2;
+      const horizon = 33 + Math.sin(t * 0.8) * 0.25;
+
+      const bg = ctx.createLinearGradient(0, 0, 0, H);
+      bg.addColorStop(0, "#6b737d");
+      bg.addColorStop(0.45, "#7b828c");
+      bg.addColorStop(1, "#2a2f35");
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, W, H);
+
+
+      fillPoly([[0, 0], [W, 0], [vpX + 16, horizon], [vpX - 16, horizon]], "#9097a1");
+      fillPoly([[0, 0], [vpX - 16, horizon], [vpX - 16, H], [0, H]], "#7a8088");
+      fillPoly([[W, 0], [vpX + 16, horizon], [vpX + 16, H], [W, H]], "#707780");
+      fillPoly([[0, H], [W, H], [vpX + 16, horizon], [vpX - 16, horizon]], "#5a6068");
+
+      const leftShade = ctx.createLinearGradient(0, 0, vpX, 0);
+      leftShade.addColorStop(0, "rgba(0,0,0,0.22)");
+      leftShade.addColorStop(1, "rgba(0,0,0,0)");
+      fillPoly([[0, 0], [vpX - 16, horizon], [vpX - 16, H], [0, H]], leftShade);
+
+      const rightShade = ctx.createLinearGradient(W, 0, vpX, 0);
+      rightShade.addColorStop(0, "rgba(0,0,0,0.24)");
+      rightShade.addColorStop(1, "rgba(0,0,0,0)");
+      fillPoly([[W, 0], [vpX + 16, horizon], [vpX + 16, H], [W, H]], rightShade);
+
+      for (let i = 0; i < 8; i++) {
+        const x = lerp(0, W, i / 7);
+        line(x, H, vpX, horizon, "rgba(255,255,255,0.045)", 1);
+      }
+
+      for (let i = 0; i < 7; i++) {
+        const y = lerp(horizon, H, i / 6);
+        line(0, y, W, y, "rgba(255,255,255,0.06)", 1);
+      }
+
+      const flicker = 0.75 + 0.25 * Math.sin(t * 13.0) + 0.07 * Math.sin(t * 31.0);
+      const lightAlpha = Math.max(0.15, Math.min(0.95, flicker));
+
+      for (let i = 0; i < 3; i++) {
+        const x1 = lerp(28, 132, i / 2) - 16;
+        const x2 = lerp(28, 132, i / 2) + 16;
+        const y1 = 10 + i * 1.2;
+        const y2 = 12 + i * 1.2;
+
+        fillPoly([[x1 - 4, y1 - 2], [x2 + 4, y1 - 2], [x2, y2 + 2], [x1, y2 + 2]], `rgba(235,245,255,${0.12 * lightAlpha})`);
+        fillPoly([[x1, y1], [x2, y1], [x2 - 1, y2], [x1 + 1, y2]], `rgba(245,250,255,${0.55 * lightAlpha})`);
+      }
+
+      const doorW = 14;
+      const doorH = 24;
+      fillPoly(
+        [
+          [vpX - doorW / 2, horizon + 2],
+          [vpX + doorW / 2, horizon + 2],
+          [vpX + doorW / 2, horizon + doorH],
+          [vpX - doorW / 2, horizon + doorH]
+        ],
+        "#3b3f46"
+      );
+
+      fillPoly(
+        [
+          [vpX - doorW / 2 - 2, horizon + 1],
+          [vpX + doorW / 2 + 2, horizon + 1],
+          [vpX + doorW / 2 + 2, horizon + doorH + 1],
+          [vpX - doorW / 2 - 2, horizon + doorH + 1]
+        ],
+        "rgba(220,235,255,0.08)"
+      );
+
+      fillPoly(
+        [
+          [vpX - 4, horizon + 6],
+          [vpX + 4, horizon + 6],
+          [vpX + 4, horizon + 9],
+          [vpX - 4, horizon + 9]
+        ],
+        "rgba(190,220,255,0.22)"
+      );
+
+      line(0, H - 1, vpX - 16, horizon, "rgba(25,28,32,0.7)", 1);
+      line(W, H - 1, vpX + 16, horizon, "rgba(25,28,32,0.7)", 1);
+
+      for (let i = 1; i <= 4; i++) {
+        const s = i / 5;
+        const lx = lerp(0, vpX - 16, s);
+        const rx = lerp(W, vpX + 16, s);
+        line(lx, 0, lerp(lx, vpX, 0.15), H, "rgba(255,255,255,0.045)", 1);
+        line(rx, 0, lerp(rx, vpX, 0.15), H, "rgba(255,255,255,0.04)", 1);
+      }
+
+      for (let i = 0; i < 420; i++) {
+        const x = (Math.random() * W) | 0;
+        const y = (Math.random() * H) | 0;
+        const a = Math.random() * 0.08;
+        ctx.fillStyle = `rgba(255,255,255,${a})`;
+        ctx.fillRect(x, y, 1, 1);
+      }
+
+      ctx.fillStyle = "rgba(0,0,0,0.045)";
+      for (let y = 0; y < H; y += 2) {
+        ctx.fillRect(0, y, W, 1);
+      }
+
+      const vignette = ctx.createRadialGradient(W / 2, H / 2, 18, W / 2, H / 2, 84);
+      vignette.addColorStop(0, "rgba(0,0,0,0)");
+      vignette.addColorStop(1, "rgba(0,0,0,0.38)");
+      ctx.fillStyle = vignette;
+      ctx.fillRect(0, 0, W, H);
+
+      requestAnimationFrame(drawScene);
+    }
+
+    requestAnimationFrame(drawScene);
+  </script>
+</body>
+</html>
