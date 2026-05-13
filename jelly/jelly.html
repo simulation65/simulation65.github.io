@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jello Simulation</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: radial-gradient(circle at center, #101826 0%, #070b12 70%, #05070b 100%);
+    }
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      cursor: none;
+    }
+    .hint {
+      position: fixed;
+      left: 16px;
+      bottom: 14px;
+      color: rgba(255,255,255,0.7);
+      font: 14px/1.3 system-ui, sans-serif;
+      user-select: none;
+      pointer-events: none;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+    }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div class="hint">Move your mouse around</div>
+
+  <script>
+    const canvas = document.getElementById("c");
+    const ctx = canvas.getContext("2d");
+
+    let w = 0, h = 0, dpr = 1;
+
+    function resize() {
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      w = window.innerWidth;
+      h = window.innerHeight;
+
+      canvas.width = Math.floor(w * dpr);
+      canvas.height = Math.floor(h * dpr);
+      canvas.style.width = w + "px";
+      canvas.style.height = h + "px";
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    window.addEventListener("resize", resize);
+    resize();
+
+    const mouse = {
+      x: w / 2,
+      y: h / 2,
+      active: false
+    };
+
+    window.addEventListener("pointermove", (e) => {
+      mouse.x = e.clientX;
+      mouse.y = e.clientY;
+      mouse.active = true;
+    });
+
+    window.addEventListener("pointerleave", () => {
+      mouse.active = false;
+    });
+
+    const core = {
+      x: w / 2,
+      y: h / 2,
+      vx: 0,
+      vy: 0
+    };
+
+    const POINTS = 28;
+    const baseRadius = 130;
+    const points = [];
+
+    for (let i = 0; i < POINTS; i++) {
+      const a = (Math.PI * 2 * i) / POINTS;
+      points.push({
+        a,
+        x: core.x + Math.cos(a) * baseRadius,
+        y: core.y + Math.sin(a) * baseRadius,
+        vx: 0,
+        vy: 0
+      });
+    }
+
+    function drawBlob() {
+      ctx.save();
+
+      // Shadow
+      ctx.beginPath();
+      ctx.ellipse(core.x + 8, core.y + 28, baseRadius * 0.85, baseRadius * 0.55, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(0,0,0,0.28)";
+      ctx.filter = "blur(18px)";
+      ctx.fill();
+      ctx.filter = "none";
+
+      // Jelly body
+      const bodyGrad = ctx.createRadialGradient(
+        core.x - 35, core.y - 40, 20,
+        core.x, core.y, baseRadius * 1.4
+      );
+      bodyGrad.addColorStop(0, "rgba(190, 255, 255, 0.95)");
+      bodyGrad.addColorStop(0.35, "rgba(90, 220, 255, 0.92)");
+      bodyGrad.addColorStop(1, "rgba(40, 120, 255, 0.88)");
+
+      ctx.beginPath();
+      let p0 = points[0];
+      ctx.moveTo((p0.x + points[1].x) / 2, (p0.y + points[1].y) / 2);
+
+      for (let i = 0; i < points.length; i++) {
+        const p = points[i];
+        const n = points[(i + 1) % points.length];
+        const mx = (p.x + n.x) / 2;
+        const my = (p.y + n.y) / 2;
+        ctx.quadraticCurveTo(p.x, p.y, mx, my);
+      }
+
+      ctx.closePath();
+      ctx.fillStyle = bodyGrad;
+      ctx.fill();
+
+      // Soft outline
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "rgba(255,255,255,0.18)";
+      ctx.stroke();
+
+      // Inner highlight
+      const shine = ctx.createRadialGradient(
+        core.x - 25, core.y - 35, 10,
+        core.x - 10, core.y - 20, 90
+      );
+      shine.addColorStop(0, "rgba(255,255,255,0.38)");
+      shine.addColorStop(0.4, "rgba(255,255,255,0.12)");
+      shine.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = shine;
+      ctx.beginPath();
+      ctx.ellipse(core.x - 16, core.y - 22, 78, 52, -0.45, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Core / object in the middle
+      const coreGrad = ctx.createRadialGradient(
+        core.x - 8, core.y - 10, 3,
+        core.x, core.y, 30
+      );
+      coreGrad.addColorStop(0, "rgba(255,255,255,1)");
+      coreGrad.addColorStop(0.3, "rgba(230,255,255,1)");
+      coreGrad.addColorStop(1, "rgba(0,180,255,1)");
+
+      ctx.beginPath();
+      ctx.arc(core.x, core.y, 18, 0, Math.PI * 2);
+      ctx.fillStyle = coreGrad;
+      ctx.shadowColor = "rgba(0, 200, 255, 0.5)";
+      ctx.shadowBlur = 18;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // Core shine
+      ctx.beginPath();
+      ctx.arc(core.x - 5, core.y - 6, 5, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    let last = performance.now();
+
+    function animate(now) {
+      const dt = Math.min((now - last) / 16.6667, 2);
+      last = now;
+
+      const targetX = mouse.active ? mouse.x : w / 2;
+      const targetY = mouse.active ? mouse.y : h / 2;
+
+      // Core follows the mouse with a springy lag
+      core.vx += (targetX - core.x) * 0.02 * dt;
+      core.vy += (targetY - core.y) * 0.02 * dt;
+      core.vx *= 0.88;
+      core.vy *= 0.88;
+      core.x += core.vx * 4 * dt;
+      core.y += core.vy * 4 * dt;
+
+      const speed = Math.hypot(core.vx, core.vy);
+      const stretch = Math.min(speed * 0.8, 22);
+
+      // Update outer jelly points
+      for (let i = 0; i < points.length; i++) {
+        const p = points[i];
+        const prev = points[(i - 1 + points.length) % points.length];
+        const next = points[(i + 1) % points.length];
+
+        const ang = p.a + Math.sin(now * 0.0015 + i) * 0.015;
+        const r = baseRadius + Math.sin(now * 0.004 + i * 0.8) * 4 + stretch;
+
+        const tx = core.x + Math.cos(ang) * r;
+        const ty = core.y + Math.sin(ang) * r;
+
+        // Spring to target shape
+        p.vx += (tx - p.x) * 0.08 * dt;
+        p.vy += (ty - p.y) * 0.08 * dt;
+
+        // Smooth with neighboring points
+        p.vx += (((prev.x + next.x) * 0.5) - p.x) * 0.01 * dt;
+        p.vy += (((prev.y + next.y) * 0.5) - p.y) * 0.01 * dt;
+
+        // Mouse poke / repel
+        if (mouse.active) {
+          const dx = p.x - mouse.x;
+          const dy = p.y - mouse.y;
+          const dist = Math.hypot(dx, dy);
+          const influence = 150;
+          if (dist < influence && dist > 0.001) {
+            const force = (1 - dist / influence) * 0.9;
+            p.vx += (dx / dist) * force * 3.0 * dt;
+            p.vy += (dy / dist) * force * 3.0 * dt;
+          }
+        }
+
+        p.vx *= 0.78;
+        p.vy *= 0.78;
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+      }
+
+      // Background fade
+      ctx.clearRect(0, 0, w, h);
+      const bg = ctx.createRadialGradient(w / 2, h / 2, 50, w / 2, h / 2, Math.max(w, h));
+      bg.addColorStop(0, "rgba(16,24,38,1)");
+      bg.addColorStop(1, "rgba(5,7,11,1)");
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, w, h);
+
+      drawBlob();
+
+      requestAnimationFrame(animate);
+    }
+
+    requestAnimationFrame(animate);
+  </script>
+</body>
+</html>
