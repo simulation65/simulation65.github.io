@@ -1,177 +1,144 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>⨇</title>
-  <style>
-    html, body {
-      margin: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: #05070a;
-    }
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>⁑</title>
 
-    canvas {
-      width: 100vw;
-      height: 100vh;
-      display: block;
-      image-rendering: pixelated;
-      image-rendering: crisp-edges;
-    }
-  </style>
+<style>
+    html, body {
+        margin: 0;
+        overflow: hidden;
+        background: black;
+        height: 100%;
+    }
+
+    canvas {
+        width: 100vw;
+        height: 100vh;
+        image-rendering: pixelated;
+        display: block;
+    }
+
+    #overlay {
+        position: absolute;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        color: rgba(255,255,255,0.4);
+        font-family: monospace;
+        font-size: 14px;
+        letter-spacing: 2px;
+        pointer-events: none;
+        text-shadow: 0 0 4px black;
+    }
+</style>
 </head>
 <body>
-  <canvas id="c"></canvas>
 
-  <script>
-    const canvas = document.getElementById("c");
-    const ctx = canvas.getContext("2d");
+<div id="overlay">⁂</div>
+<canvas id="c"></canvas>
 
-    const W = 160;
-    const H = 90;
-    canvas.width = W;
-    canvas.height = H;
-    ctx.imageSmoothingEnabled = false;
+<script>
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
 
-    const lerp = (a, b, t) => a + (b - a) * t;
+const scale = 4;
 
-    function fillPoly(points, style) {
-      ctx.fillStyle = style;
-      ctx.beginPath();
-      ctx.moveTo(points[0][0], points[0][1]);
-      for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
-      ctx.closePath();
-      ctx.fill();
-    }
+function resize() {
+    canvas.width = innerWidth / scale;
+    canvas.height = innerHeight / scale;
+}
+resize();
+addEventListener("resize", resize);
 
-    function line(x1, y1, x2, y2, style, width = 1) {
-      ctx.strokeStyle = style;
-      ctx.lineWidth = width;
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.stroke();
-    }
+let flicker = 0;
 
-    function drawScene(time) {
-      const t = time * 0.001;
-      const vpX = W / 2 + Math.sin(t * 0.6) * 2;
-      const horizon = 33 + Math.sin(t * 0.8) * 0.25;
+function draw() {
+    const w = canvas.width;
+    const h = canvas.height;
 
-      const bg = ctx.createLinearGradient(0, 0, 0, H);
-      bg.addColorStop(0, "#6b737d");
-      bg.addColorStop(0.45, "#7b828c");
-      bg.addColorStop(1, "#2a2f35");
-      ctx.fillStyle = bg;
-      ctx.fillRect(0, 0, W, H);
+    // Background
+    ctx.fillStyle = "#2b2b2b";
+    ctx.fillRect(0, 0, w, h);
 
+    // Ceiling
+    ctx.fillStyle = "#3a3a3a";
+    ctx.fillRect(0, 0, w, h * 0.35);
 
-      fillPoly([[0, 0], [W, 0], [vpX + 16, horizon], [vpX - 16, horizon]], "#9097a1");
-      fillPoly([[0, 0], [vpX - 16, horizon], [vpX - 16, H], [0, H]], "#7a8088");
-      fillPoly([[W, 0], [vpX + 16, horizon], [vpX + 16, H], [W, H]], "#707780");
-      fillPoly([[0, H], [W, H], [vpX + 16, horizon], [vpX - 16, horizon]], "#5a6068");
+    // Floor
+    ctx.fillStyle = "#4f4a44";
+    ctx.fillRect(0, h * 0.35, w, h);
 
-      const leftShade = ctx.createLinearGradient(0, 0, vpX, 0);
-      leftShade.addColorStop(0, "rgba(0,0,0,0.22)");
-      leftShade.addColorStop(1, "rgba(0,0,0,0)");
-      fillPoly([[0, 0], [vpX - 16, horizon], [vpX - 16, H], [0, H]], leftShade);
+    // Perspective hallway
+    const center = w / 2;
 
-      const rightShade = ctx.createLinearGradient(W, 0, vpX, 0);
-      rightShade.addColorStop(0, "rgba(0,0,0,0.24)");
-      rightShade.addColorStop(1, "rgba(0,0,0,0)");
-      fillPoly([[W, 0], [vpX + 16, horizon], [vpX + 16, H], [W, H]], rightShade);
+    for (let i = 0; i < 12; i++) {
+        const y = h * 0.35 + i * 12;
 
-      for (let i = 0; i < 8; i++) {
-        const x = lerp(0, W, i / 7);
-        line(x, H, vpX, horizon, "rgba(255,255,255,0.045)", 1);
-      }
+        ctx.strokeStyle = `rgb(${70+i*5},${70+i*5},${70+i*5})`;
+        ctx.beginPath();
+        ctx.moveTo(center - 20 - i * 8, y);
+        ctx.lineTo(center + 20 + i * 8, y);
+        ctx.stroke();
+    }
 
-      for (let i = 0; i < 7; i++) {
-        const y = lerp(horizon, H, i / 6);
-        line(0, y, W, y, "rgba(255,255,255,0.06)", 1);
-      }
+    // Walls
+    ctx.fillStyle = "#6a645c";
 
-      const flicker = 0.75 + 0.25 * Math.sin(t * 13.0) + 0.07 * Math.sin(t * 31.0);
-      const lightAlpha = Math.max(0.15, Math.min(0.95, flicker));
+    ctx.beginPath();
+    ctx.moveTo(0, h);
+    ctx.lineTo(center - 30, h * 0.35);
+    ctx.lineTo(center - 5, h * 0.35);
+    ctx.lineTo(center - 70, h);
+    ctx.fill();
 
-      for (let i = 0; i < 3; i++) {
-        const x1 = lerp(28, 132, i / 2) - 16;
-        const x2 = lerp(28, 132, i / 2) + 16;
-        const y1 = 10 + i * 1.2;
-        const y2 = 12 + i * 1.2;
+    ctx.beginPath();
+    ctx.moveTo(w, h);
+    ctx.lineTo(center + 30, h * 0.35);
+    ctx.lineTo(center + 5, h * 0.35);
+    ctx.lineTo(center + 70, h);
+    ctx.fill();
 
-        fillPoly([[x1 - 4, y1 - 2], [x2 + 4, y1 - 2], [x2, y2 + 2], [x1, y2 + 2]], `rgba(235,245,255,${0.12 * lightAlpha})`);
-        fillPoly([[x1, y1], [x2, y1], [x2 - 1, y2], [x1 + 1, y2]], `rgba(245,250,255,${0.55 * lightAlpha})`);
-      }
+    // Ceiling lights
+    for (let i = 0; i < 5; i++) {
+        const size = 10 - i;
+        const y = 18 + i * 18;
 
-      const doorW = 14;
-      const doorH = 24;
-      fillPoly(
-        [
-          [vpX - doorW / 2, horizon + 2],
-          [vpX + doorW / 2, horizon + 2],
-          [vpX + doorW / 2, horizon + doorH],
-          [vpX - doorW / 2, horizon + doorH]
-        ],
-        "#3b3f46"
-      );
+        ctx.fillStyle = `rgba(255,255,210,${0.7 - i*0.1})`;
+        ctx.fillRect(center - size, y, size * 2, 2);
+    }
 
-      fillPoly(
-        [
-          [vpX - doorW / 2 - 2, horizon + 1],
-          [vpX + doorW / 2 + 2, horizon + 1],
-          [vpX + doorW / 2 + 2, horizon + doorH + 1],
-          [vpX - doorW / 2 - 2, horizon + doorH + 1]
-        ],
-        "rgba(220,235,255,0.08)"
-      );
+    // Random flicker
+    flicker += Math.random() * 0.4;
 
-      fillPoly(
-        [
-          [vpX - 4, horizon + 6],
-          [vpX + 4, horizon + 6],
-          [vpX + 4, horizon + 9],
-          [vpX - 4, horizon + 9]
-        ],
-        "rgba(190,220,255,0.22)"
-      );
+    if (Math.sin(flicker) > 0.85) {
+        ctx.fillStyle = "rgba(255,255,255,0.08)";
+        ctx.fillRect(0, 0, w, h);
+    }
 
-      line(0, H - 1, vpX - 16, horizon, "rgba(25,28,32,0.7)", 1);
-      line(W, H - 1, vpX + 16, horizon, "rgba(25,28,32,0.7)", 1);
+    // Noise
+    for (let i = 0; i < 250; i++) {
+        ctx.fillStyle = `rgba(255,255,255,${Math.random()*0.03})`;
+        ctx.fillRect(
+            Math.random() * w,
+            Math.random() * h,
+            1,
+            1
+        );
+    }
 
-      for (let i = 1; i <= 4; i++) {
-        const s = i / 5;
-        const lx = lerp(0, vpX - 16, s);
-        const rx = lerp(W, vpX + 16, s);
-        line(lx, 0, lerp(lx, vpX, 0.15), H, "rgba(255,255,255,0.045)", 1);
-        line(rx, 0, lerp(rx, vpX, 0.15), H, "rgba(255,255,255,0.04)", 1);
-      }
+    // VHS scanlines
+    ctx.fillStyle = "rgba(0,0,0,0.12)";
+    for (let y = 0; y < h; y += 2) {
+        ctx.fillRect(0, y, w, 1);
+    }
 
-      for (let i = 0; i < 420; i++) {
-        const x = (Math.random() * W) | 0;
-        const y = (Math.random() * H) | 0;
-        const a = Math.random() * 0.08;
-        ctx.fillStyle = `rgba(255,255,255,${a})`;
-        ctx.fillRect(x, y, 1, 1);
-      }
+    requestAnimationFrame(draw);
+}
 
-      ctx.fillStyle = "rgba(0,0,0,0.045)";
-      for (let y = 0; y < H; y += 2) {
-        ctx.fillRect(0, y, W, 1);
-      }
+draw();
+</script>
 
-      const vignette = ctx.createRadialGradient(W / 2, H / 2, 18, W / 2, H / 2, 84);
-      vignette.addColorStop(0, "rgba(0,0,0,0)");
-      vignette.addColorStop(1, "rgba(0,0,0,0.38)");
-      ctx.fillStyle = vignette;
-      ctx.fillRect(0, 0, W, H);
-
-      requestAnimationFrame(drawScene);
-    }
-
-    requestAnimationFrame(drawScene);
-  </script>
 </body>
 </html>
